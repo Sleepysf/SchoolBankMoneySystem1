@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>School Bank | Money System</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Plus Jakarta Sans', 'sans-serif'] },
+                    animation: {
+                        'spring': 'spring 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                        'slide-up': 'slideUp 0.3s ease-out',
+                    },
+                    keyframes: {
+                        spring: {
+                            '0%': { transform: 'scale(0.9) translateY(10px)', opacity: '0' },
+                            '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { transform: 'translateY(20px)', opacity: '0' },
+                            '100%': { transform: 'translateY(0)', opacity: '1' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { overscroll-behavior-y: contain; user-select: none; }
+        input, textarea { user-select: auto; }
+        .glass { backdrop-filter: blur(16px); background: rgba(255, 255, 255, 0.7); }
+        .dark .glass { background: rgba(15, 23, 42, 0.8); }
+        .bg-mesh {
+            background-color: #f8fafc;
+            background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%), radial-gradient(at 100% 0%, rgba(244, 114, 182, 0.15) 0px, transparent 50%);
+        }
+        .dark .bg-mesh {
+            background-color: #020617;
+            background-image: radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%), radial-gradient(at 100% 0%, rgba(244, 114, 182, 0.1) 0px, transparent 50%);
+        }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+        .pt-safe { padding-top: env(safe-area-inset-top); }
+    </style>
+</head>
+<body class="bg-mesh text-slate-900 dark:text-slate-100 transition-colors duration-500 font-sans min-h-screen overflow-x-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const AGE_GROUPS = {
+            CHILD: { label: 'Junior', theme: 'from-amber-400 to-orange-500', categories: ['Allowance 🎁', 'Chores 🧹', 'Gifts 🎂', 'Toys 🧸', 'Snacks 🍬'] },
+            TEEN: { label: 'Teen', theme: 'from-indigo-500 to-purple-600', categories: ['Part-time Job 🍔', 'Parents 💳', 'Gaming 🎮', 'Fashion 👟', 'Subscribers 📱'] },
+            ADULT: { label: 'Pro', theme: 'from-slate-800 to-black', categories: ['Salary 💼', 'Investments 📈', 'Rent/Mortgage 🏠', 'Utilities ⚡', 'Groceries 🛒', 'Dining 🍷'] }
+        };
+
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const icons = {
+                wallet: <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4M4 6v12c0 1.1.9 2 2 2h14v-4M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/>,
+                plus: <path d="M12 5v14M5 12h14"/>,
+                vault: <React.Fragment><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 10h18M10 3v18M14 10a2 2 0 0 1-2 2 2 2 0 0 1-2-2"/></React.Fragment>,
+                user: <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>,
+                send: <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>,
+                chevron: <polyline points="9 18 15 12 9 6" />,
+                chart: <React.Fragment><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></React.Fragment>
+            };
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        function App() {
+            const [user, setUser] = useState(() => JSON.parse(localStorage.getItem('bv_user')));
+            const [profiles, setProfiles] = useState(() => JSON.parse(localStorage.getItem('bv_profiles') || '[]'));
+            const [activeProfileId, setActiveProfileId] = useState(() => localStorage.getItem('bv_active_profile_id'));
+            const [transactions, setTransactions] = useState([]);
+            const [view, setView] = useState('dash');
+            const [darkMode, setDarkMode] = useState(() => localStorage.getItem('bv_theme') === 'dark');
+            
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [showTransferModal, setShowTransferModal] = useState(false);
+            const [errorMsg, setErrorMsg] = useState('');
+
+            useEffect(() => {
+                document.documentElement.classList.toggle('dark', darkMode);
+            }, [darkMode]);
+
+            useEffect(() => {
+                if (activeProfileId) {
+                    localStorage.setItem('bv_active_profile_id', activeProfileId);
+                    const saved = JSON.parse(localStorage.getItem(`bv_txs_${activeProfileId}`) || '[]');
+                    setTransactions(saved.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)));
+                } else {
+                    localStorage.removeItem('bv_active_profile_id');
+                }
+            }, [activeProfileId]);
+
+            const activeProfile = useMemo(() => profiles.find(p => p.id === activeProfileId), [profiles, activeProfileId]);
+            
+            const ageGroup = useMemo(() => {
+                if (!activeProfile) return AGE_GROUPS.ADULT;
+                const age = new Date().getFullYear() - new Date(activeProfile.birthday).getFullYear();
+                if (age < 13) return AGE_GROUPS.CHILD;
+                if (age < 20) return AGE_GROUPS.TEEN;
+                return AGE_GROUPS.ADULT;
+            }, [activeProfile]);
+
+            const stats = useMemo(() => {
+                const income = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+                const expense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+                return { balance: income - expense, income, expense };
+            }, [transactions]);
+
+            const handleAuth = (e) => {
+                e.preventDefault();
+                const { email } = e.target.elements;
+                const mockUser = { uid: btoa(email.value), email: email.value };
+                setUser(mockUser);
+                localStorage.setItem('bv_user', JSON.stringify(mockUser));
+            };
+
+            const handleCreateProfile = (e) => {
+                e.preventDefault();
+                const data = new FormData(e.target);
+                const newProfile = {
+                    id: Math.floor(100000 + Math.random() * 900000).toString(), // Generate Trason ID
+                    name: data.get('name'),
+                    birthday: data.get('birthday')
+                };
+                const updatedProfiles = [...profiles, newProfile];
+                setProfiles(updatedProfiles);
+                localStorage.setItem('bv_profiles', JSON.stringify(updatedProfiles));
+                
+                // Initial Balance Deposit
+                const initialTxs = [{
+                    id: Date.now().toString(),
+                    amount: 50.00,
+                    type: 'income',
+                    category: 'Welcome 🎁',
+                    description: 'Opening Balance',
+                    timestamp: new Date().toISOString()
+                }];
+                localStorage.setItem(`bv_txs_${newProfile.id}`, JSON.stringify(initialTxs));
+                
+                setActiveProfileId(newProfile.id);
+                setView('dash');
+            };
+
+            const handleAdd = (e) => {
+                e.preventDefault();
+                const data = new FormData(e.target);
+                const amount = parseFloat(data.get('amount'));
+                if (!amount) return;
+
+                const newTxs = [{
+                    id: Date.now().toString(),
+                    amount, type: data.get('type'),
+                    category: data.get('category'),
+                    description: data.get('description'),
+                    timestamp: new Date().toISOString()
+                }, ...transactions];
+
+                setTransactions(newTxs);
+                localStorage.setItem(`bv_txs_${activeProfileId}`, JSON.stringify(newTxs));
+                setShowAddModal(false);
+                confetti();
+            };
+
+            const handleTransfer = (e) => {
+                e.preventDefault();
+                setErrorMsg('');
+                const data = new FormData(e.target);
+                const recipientId = data.get('recipientId').trim();
+                const amount = parseFloat(data.get('amount'));
+
+                if(recipientId === activeProfileId) {
+                    setErrorMsg("Cannot send to yourself");
+                    return;
+                }
+                if(amount > stats.balance) {
+                    setErrorMsg("Insufficient funds");
+                    return;
+                }
+
+                const targetProfile = profiles.find(p => p.id === recipientId);
+                if(!targetProfile) {
+                    setErrorMsg("Trason ID not found");
+                    return;
+                }
+
+                // Update Sender
+                const senderTxs = [{
+                    id: Date.now().toString(),
+                    amount: amount,
+                    type: 'expense',
+                    category: 'Transfer Out 💸',
+                    description: `To: ${targetProfile.name}`,
+                    timestamp: new Date().toISOString()
+                }, ...transactions];
+                setTransactions(senderTxs);
+                localStorage.setItem(`bv_txs_${activeProfileId}`, JSON.stringify(senderTxs));
+
+                // Update Recipient
+                const recipientTxs = JSON.parse(localStorage.getItem(`bv_txs_${recipientId}`) || '[]');
+                recipientTxs.push({
+                    id: (Date.now() + 1).toString(),
+                    amount: amount,
+                    type: 'income',
+                    category: 'Transfer In 💸',
+                    description: `From: ${activeProfile.name}`,
+                    timestamp: new Date().toISOString()
+                });
+                localStorage.setItem(`bv_txs_${recipientId}`, JSON.stringify(recipientTxs));
+
+                setShowTransferModal(false);
+                confetti({ particleCount: 150 });
+            };
+
+            // Login View
+            if (!user) return (
+                <div className="min-h-screen flex items-center justify-center p-6">
+                    <div className="max-w-md w-full glass p-8 rounded-[2.5rem] shadow-2xl animate-spring border border-white/20">
+                        <h1 className="text-2xl font-black text-center mb-10 dark:text-white">School Bank</h1>
+                        <form onSubmit={handleAuth} className="space-y-4">
+                            <input name="email" type="email" required placeholder="Email" className="w-full px-6 py-4 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none" />
+                            <input name="password" type="password" required placeholder="Password" className="w-full px-6 py-4 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none" />
+                            <button className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black shadow-lg">Login</button>
+                        </form>
+                    </div>
+                </div>
+            );
+
+            // Account Selection View
+            if (!activeProfileId && view !== 'create_profile') return (
+                <div className="min-h-screen p-6 pt-safe">
+                    <div className="max-w-md mx-auto space-y-6">
+                        <h1 className="text-2xl font-black">Select Account</h1>
+                        <div className="space-y-3">
+                            {profiles.map(p => (
+                                <button key={p.id} onClick={() => setActiveProfileId(p.id)} className="w-full p-5 rounded-2xl bg-white dark:bg-slate-900 flex items-center justify-between shadow-sm">
+                                    <div className="text-left">
+                                        <span className="font-bold block">{p.name}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono">ID: {p.id}</span>
+                                    </div>
+                                    <Icon name="chevron" size={16} />
+                                </button>
+                            ))}
+                            <button onClick={() => setView('create_profile')} className="w-full py-5 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-400 font-black">＋ New Account</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // Create Profile View
+            if (view === 'create_profile') return (
+                <div className="min-h-screen p-6 pt-safe flex items-center justify-center">
+                    <div className="max-w-md w-full glass p-8 rounded-[2.5rem]">
+                        <h2 className="text-xl font-black mb-6">Create Account</h2>
+                        <form onSubmit={handleCreateProfile} className="space-y-4">
+                            <input name="name" required placeholder="Full Name" className="w-full px-6 py-4 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none" />
+                            <input name="birthday" type="date" required className="w-full px-6 py-4 rounded-xl bg-slate-100 dark:bg-slate-800 outline-none" />
+                            <button className="w-full py-4 bg-indigo-600 text-white rounded-xl font-black">Create My ID</button>
+                            <button type="button" onClick={() => setView('dash')} className="w-full py-2 text-slate-400 text-xs font-bold">Cancel</button>
+                        </form>
+                    </div>
+                </div>
+            );
+
+            // Dashboard View
+            return (
+                <div className="max-w-md mx-auto min-h-screen flex flex-col pt-safe pb-32">
+                    <header className="px-6 py-4 flex items-center justify-between sticky top-0 z-40 bg-mesh/80 backdrop-blur-md">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${ageGroup.theme} flex items-center justify-center text-white`}>
+                                <Icon name="chart" size={20} />
+                            </div>
+                            <div>
+                                <p className="text-[9px] font-black uppercase text-slate-400">ID: {activeProfile.id}</p>
+                                <h2 className="text-lg font-black">{activeProfile.name}</h2>
+                            </div>
+                        </div>
+                        <button onClick={() => setActiveProfileId(null)} className="p-3 bg-white dark:bg-slate-900 rounded-xl"><Icon name="user" size={18}/></button>
+                    </header>
+
+                    <main className="px-6 flex-grow space-y-6">
+                        <section className={`p-8 rounded-[2.5rem] bg-gradient-to-br ${ageGroup.theme} text-white shadow-xl animate-slide-up`}>
+                            <p className="text-[10px] font-black opacity-70 uppercase tracking-widest mb-1">Balance</p>
+                            <h3 className="text-5xl font-black mb-8 tracking-tighter">${stats.balance.toFixed(2)}</h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                                    <p className="text-[8px] font-black uppercase">In</p>
+                                    <p className="text-lg font-black text-emerald-300">+${stats.income.toFixed(2)}</p>
+                                </div>
+                                <div className="bg-white/10 p-4 rounded-2xl border border-white/10">
+                                    <p className="text-[8px] font-black uppercase">Out</p>
+                                    <p className="text-lg font-black text-rose-300">-${stats.expense.toFixed(2)}</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div className="space-y-3 pb-10">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase">Recent Activity</h4>
+                            {transactions.map(t => (
+                                <div key={t.id} className="bg-white dark:bg-slate-900 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${t.type === 'income' ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
+                                            {t.type === 'income' ? '+' : '-'}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-black">{t.description}</p>
+                                            <p className="text-[9px] font-black text-slate-400">{t.category}</p>
+                                        </div>
+                                    </div>
+                                    <p className={`font-black text-sm ${t.type === 'income' ? 'text-emerald-500' : ''}`}>${t.amount.toFixed(2)}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </main>
+
+                    <nav className="fixed bottom-6 left-6 right-6 z-50">
+                        <div className="max-w-sm mx-auto glass border border-white/50 shadow-2xl rounded-[2.5rem] p-3 flex justify-around items-center h-20">
+                            <button onClick={() => setShowTransferModal(true)} className="flex flex-col items-center gap-1 text-slate-400">
+                                <Icon name="send" size={20} />
+                                <span className="text-[8px] font-black">SEND</span>
+                            </button>
+                            <button onClick={() => setShowAddModal(true)} className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${ageGroup.theme} text-white flex items-center justify-center shadow-lg -mt-12 border-4 border-white dark:border-slate-950`}>
+                                <Icon name="plus" size={28} />
+                            </button>
+                            <button className="flex flex-col items-center gap-1 text-slate-400 opacity-50">
+                                <Icon name="vault" size={20} />
+                                <span className="text-[8px] font-black">VAULT</span>
+                            </button>
+                        </div>
+                    </nav>
+
+                    {(showAddModal || showTransferModal) && (
+                        <div className="fixed inset-0 z-[60] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
+                            <div className="w-full max-w-sm bg-white dark:bg-slate-900 rounded-[2rem] p-8 animate-spring">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="font-black text-xs uppercase">{showAddModal ? 'New Entry' : 'Transfer'}</h3>
+                                    <button onClick={() => {setShowAddModal(false); setShowTransferModal(false); setErrorMsg('');}} className="text-slate-400">✕</button>
+                                </div>
+                                {showAddModal && (
+                                    <form onSubmit={handleAdd} className="space-y-5">
+                                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl">
+                                            <label className="flex-1">
+                                                <input type="radio" name="type" value="expense" defaultChecked className="hidden peer" />
+                                                <div className="text-center py-2.5 rounded-lg text-[9px] font-black cursor-pointer peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-rose-600">SPEND</div>
+                                            </label>
+                                            <label className="flex-1">
+                                                <input type="radio" name="type" value="income" className="hidden peer" />
+                                                <div className="text-center py-2.5 rounded-lg text-[9px] font-black cursor-pointer peer-checked:bg-white dark:peer-checked:bg-slate-700 peer-checked:text-emerald-600">EARN</div>
+                                            </label>
+                                        </div>
+                                        <input name="amount" type="number" step="0.01" required placeholder="$ 0.00" className="w-full bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl text-4xl font-black text-center outline-none" />
+                                        <select name="category" className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-xs uppercase outline-none">
+                                            {ageGroup.categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <input name="description" required placeholder="What for?" className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-xs outline-none" />
+                                        <button className={`w-full py-5 rounded-xl text-white font-black bg-gradient-to-r ${ageGroup.theme} text-xs uppercase`}>Confirm</button>
+                                    </form>
+                                )}
+                                {showTransferModal && (
+                                    <form onSubmit={handleTransfer} className="space-y-5">
+                                        {errorMsg && <p className="text-[10px] font-black text-rose-500 text-center">{errorMsg}</p>}
+                                        <input name="recipientId" type="number" required placeholder="Recipient Trason ID" className="w-full p-4 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-xs outline-none" />
+                                        <input name="amount" type="number" step="0.01" required placeholder="$ 0.00" className="w-full bg-slate-50 dark:bg-slate-800 p-6 rounded-2xl text-4xl font-black text-center outline-none" />
+                                        <button className="w-full py-5 rounded-xl text-white font-black bg-indigo-600 text-xs uppercase">Send Now</button>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
